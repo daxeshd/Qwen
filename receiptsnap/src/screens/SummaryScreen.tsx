@@ -8,11 +8,17 @@ import { EXPENSE_CATEGORIES } from '../../utils/constants';
 interface SummaryScreenProps {
   expenses: Expense[];
   isPremium: boolean;
+  taxSummary?: {
+    totalDeductible: number;
+    byCategory: Record<string, number>;
+    receiptCount: number;
+    averageReceipt: number;
+  } | null;
 }
 
 const screenWidth = Dimensions.get('window').width;
 
-export default function SummaryScreen({ expenses, isPremium }: SummaryScreenProps) {
+export default function SummaryScreen({ expenses, isPremium, taxSummary }: SummaryScreenProps) {
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
 
@@ -195,15 +201,35 @@ export default function SummaryScreen({ expenses, isPremium }: SummaryScreenProp
       </View>
 
       {/* Tax Summary (Premium Feature) */}
-      {isPremium && (
+      {isPremium && taxSummary && (
         <View style={styles.taxSection}>
-          <Text style={styles.sectionTitle}>Tax Summary</Text>
+          <Text style={styles.sectionTitle}>Year-to-Date Tax Summary</Text>
           <View style={styles.taxCard}>
             <Text style={styles.taxLabel}>Estimated Deductible Expenses</Text>
-            <Text style={styles.taxValue}>${totalAmount.toFixed(2)}</Text>
+            <Text style={styles.taxValue}>${taxSummary.totalDeductible.toFixed(2)}</Text>
+            <View style={styles.taxDetails}>
+              <View style={styles.taxDetailItem}>
+                <Text style={styles.taxDetailLabel}>Receipts:</Text>
+                <Text style={styles.taxDetailValue}>{taxSummary.receiptCount}</Text>
+              </View>
+              <View style={styles.taxDetailItem}>
+                <Text style={styles.taxDetailLabel}>Average:</Text>
+                <Text style={styles.taxDetailValue}>${taxSummary.averageReceipt.toFixed(2)}</Text>
+              </View>
+            </View>
             <Text style={styles.taxNote}>
               Consult with a tax professional for accurate tax advice.
             </Text>
+          </View>
+        </View>
+      )}
+
+      {!isPremium && (
+        <View style={styles.taxSection}>
+          <Text style={styles.sectionTitle}>Tax Summary</Text>
+          <View style={[styles.taxCard, styles.lockedCard]}>
+            <Text style={styles.lockedIcon}>🔒</Text>
+            <Text style={styles.lockedText}>Upgrade to Premium for tax summaries</Text>
           </View>
         </View>
       )}
@@ -428,6 +454,41 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderLeftWidth: 4,
     borderLeftColor: '#2563eb',
+  },
+  lockedCard: {
+    backgroundColor: '#f9fafb',
+    borderLeftColor: '#9ca3af',
+    alignItems: 'center',
+  },
+  lockedIcon: {
+    fontSize: 32,
+    marginBottom: 8,
+  },
+  lockedText: {
+    fontSize: 14,
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  taxDetails: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#dbeafe',
+  },
+  taxDetailItem: {
+    alignItems: 'center',
+  },
+  taxDetailLabel: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
+  taxDetailValue: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e40af',
   },
   taxLabel: {
     fontSize: 14,

@@ -10,6 +10,7 @@ import {
   deleteDoc,
   Timestamp,
   QueryConstraint,
+  getDoc,
 } from 'firebase/firestore';
 import { db } from './firebase';
 import { Expense } from '../types';
@@ -181,5 +182,123 @@ export const getReceiptCountForMonth = async (userId: string, year: number, mont
   } catch (error: any) {
     console.error('Error counting receipts:', error);
     return 0;
+  }
+};
+
+/**
+ * Check for potential duplicate receipts based on merchant, date, and amount
+ */
+export const checkForDuplicates = async (
+  userId: string,
+  merchant: string,
+  date: string,
+  amount: number
+): Promise<Expense[]> => {
+  try {
+    // Search for expenses with same merchant and date
+    const q = query(
+      collection(db, 'expenses'),
+      where('userId', '==', userId),
+      where('merchant', '==', merchant),
+      where('date', '==', date)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    const duplicates: Expense[] = [];
+    
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      // Check if amount matches (within 1 cent tolerance for floating point)
+      if (Math.abs(data.amount - amount) < 0.01) {
+        duplicates.push({
+          id: doc.id,
+          merchant: data.merchant,
+          userId: data.userId,
+          date: data.date,
+          amount: data.amount,
+          category: data.category,
+          notes: data.notes,
+          imageUrl: data.imageUrl,
+          ocrText: data.ocrText,
+          createdAt: data.createdAt?.toDate() || new Date(),
+          updatedAt: data.updatedAt?.toDate() || new Date(),
+        } as Expense);
+      }
+    });
+    
+    return duplicates;
+  } catch (error: any) {
+    console.error('Error checking for duplicates:', error);
+    return [];
+  }
+};
+
+/**
+ * Export expenses to CSV format
+ */
+export const exportExpensesToCSV = (expenses: Expense[]): string => {
+  const headers = ['Date', 'Merchant', 'Category', 'Amount', 'Notes'];
+  const rows = expenses.map((expense) => [
+    expense.date,
+    `"${expense.merchant.replace(/"/g, '""')}"`,
+    `"${expense.category.replace(/"/g, '""')}"`,
+    expense.amount.toFixed(2),
+    `"${(expense.notes || '').replace(/"/g, '""')}"`,
+  ]);
+  
+  return [headers.join(','), ...rows.map((row) => row.join(','))].join('\n');
+};
+
+/**
+ * Get tax summary for a date range (premium feature)
+ */
+export const getTaxSummary = async (
+  userId: string,
+  startDate: string,
+  endDate: string
+): Promise<{
+  totalDeductible: number;
+  byCategory: Record<string, number>;
+  receiptCount: number;
+  averageReceipt: number;
+}> => {
+  try {
+    const q = query(
+      collection(db, 'expenses'),
+      where('userId', '==', userId),
+      where('date', '>=', startDate),
+      where('date', '<=', endDate)
+    );
+    
+    const querySnapshot = await getDocs(q);
+    let totalDeductible = 0;
+    const byCategory: Record<string, number> = {};
+    let receiptCount = 0;
+    
+    querySnapshot.forEach((doc) => {
+      const data = doc.data();
+      totalDeductible += data.amount;
+      receiptCount++;
+      
+      if (!byCategory[data.category]) {
+        byCategory[data.category] = 0;
+      }
+      byCategory[data.category] += data.amount;
+    });
+    
+    return {
+      totalDeductible,
+      byCategory,
+      receiptCount,
+      averageReceipt: receiptCount > 0 ? totalDeductible / receiptCount : 0,
+    };
+  } catch (error: any) {
+    console.error('Error getting tax summary:', error);
+    return {
+      totalDeductible: 0,
+      byCategory: {},
+      receiptCount: 0,
+      averageReceipt: 0,
+    };
   }
 };

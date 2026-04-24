@@ -3,7 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { router } from 'expo-router';
 import { Expense, OCRResult } from '../../types';
 import { EXPENSE_CATEGORIES } from '../../utils/constants';
-import { createExpense } from '../../services/expenseService';
+import { createExpense, updateExpense, checkForDuplicates } from '../../services/expenseService';
 import { uploadReceiptImage } from '../../services/storageService';
 import { useAuth } from '../../context/AuthContext';
 
@@ -37,6 +37,34 @@ export default function EditReceiptScreen({ ocrResult, imageUri, onSaved }: Edit
     setLoading(true);
 
     try {
+      // Check for duplicates before saving (only for new receipts)
+      if (!ocrResult?.rawText || !imageUri) {
+        const duplicates = await checkForDuplicates(
+          user.uid,
+          merchant,
+          date,
+          parseFloat(amount)
+        );
+        
+        if (duplicates.length > 0) {
+          const response = await new Promise<'save' | 'cancel'>((resolve) => {
+            Alert.alert(
+              'Potential Duplicate',
+              `A receipt from ${merchant} on ${date} for $${amount} already exists. Save anyway?`,
+              [
+                { text: 'Cancel', style: 'cancel', onPress: () => resolve('cancel') },
+                { text: 'Save Anyway', onPress: () => resolve('save') },
+              ]
+            );
+          });
+          
+          if (response === 'cancel') {
+            setLoading(false);
+            return;
+          }
+        }
+      }
+
       let imageUrl: string | undefined;
 
       // Upload image if provided
